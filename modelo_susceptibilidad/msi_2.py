@@ -129,7 +129,7 @@ class msi_2(wmf.SimuBasin):
         IDs=np.array([int(i.split(',')[0]) for i in filelines[5:]])
         fechas=np.array([(i.split(',')[-1]) for i in filelines[5:]])
         fechas = [i.strip() for i in fechas]
-        fecha_str_h = self.fecha.strftime("%Y-%m-%d-%H:%M")
+        fecha_str_h = self.fecha.strftime("%Y-%m-%d-%H:00")
         print("el día consultado de humedad es:", fecha_str_h)
         ind = fechas.index(fecha_str_h) +1
         print(len(fechas))
@@ -345,23 +345,23 @@ class msi_2(wmf.SimuBasin):
         
         self.generar_mapa_lluvia(lluvia_radar = lluvia_radar, fecha_inicio = fecha_inicio, fecha_fin = fecha_fin, dias_acumulado = dias_acumulado, umbral_sequia = umbral_sequia)
         
-        mapa_probabilidad_acumulados = np.zeros_like(self.mapa_lluvia_radar)
-        mapa_probabilidad_sequia = np.zeros_like(self.mapa_lluvia_radar)
+        self.mapa_probabilidad_acumulados = np.zeros_like(self.mapa_lluvia_radar)
+        self.mapa_probabilidad_sequia = np.zeros_like(self.mapa_lluvia_radar)
         
         for i, probabilidad in enumerate(probabilidad_acumulados):
-            mapa_probabilidad_acumulados[(self.mapa_lluvia_radar >= umbrales_acumulados[i])&(self.mapa_lluvia_radar <= umbrales_acumulados[i + 1])] = probabilidad_acumulados[i]
+            self.mapa_probabilidad_acumulados[(self.mapa_lluvia_radar >= umbrales_acumulados[i])&(self.mapa_lluvia_radar <= umbrales_acumulados[i + 1])] = probabilidad_acumulados[i]
             
         
         #zona naranja
-        mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 0)&(self.mapa_tiempo_sequia <= 4)&(self.mapa_lluvia_radar >= umbrales_acumulados[0])&(self.mapa_lluvia_radar < umbrales_acumulados[3]))[0]] = 1.4
+        self.mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 0)&(self.mapa_tiempo_sequia <= 4)&(self.mapa_lluvia_radar >= umbrales_acumulados[0])&(self.mapa_lluvia_radar < umbrales_acumulados[3]))[0]] = 1.4
         #zona roja
-        mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 4)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[0])&(self.mapa_lluvia_radar < umbrales_acumulados[1]))[0]] = 1.5
+        self.mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 4)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[0])&(self.mapa_lluvia_radar < umbrales_acumulados[1]))[0]] = 1.5
         #zona amarilla
-        mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 4)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[1])&(self.mapa_lluvia_radar < umbrales_acumulados[3]))[0]] = 1.2
+        self.mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 4)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[1])&(self.mapa_lluvia_radar < umbrales_acumulados[3]))[0]] = 1.2
         #zona azul
-        mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 0)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[3]))[0]] = 1
+        self.mapa_probabilidad_sequia[np.where((self.mapa_tiempo_sequia >= 0)&(self.mapa_tiempo_sequia <= 7)&(self.mapa_lluvia_radar >= umbrales_acumulados[3]))[0]] = 1
 
-        self.mapa_probabilidad_lluvia = mapa_probabilidad_acumulados * mapa_probabilidad_sequia
+        self.mapa_probabilidad_lluvia = self.mapa_probabilidad_acumulados * self.mapa_probabilidad_sequia
             
         return self.mapa_probabilidad_lluvia
     
