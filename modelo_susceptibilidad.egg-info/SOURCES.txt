@@ -1,6 +1,7 @@
 MANIFEST.in
 README.md
 setup.py
+modelo_susceptibilidad/FI.py
 modelo_susceptibilidad/__init__.py
 modelo_susceptibilidad/msi.py
 modelo_susceptibilidad/msi_2.py

@@ -129,7 +129,9 @@ class msi_2(wmf.SimuBasin):
         IDs=np.array([int(i.split(',')[0]) for i in filelines[5:]])
         fechas=np.array([(i.split(',')[-1]) for i in filelines[5:]])
         fechas = [i.strip() for i in fechas]
-        fecha_str_h = self.fecha.strftime("%Y-%m-%d-%H:00")
+        fecha_provicional = _datetime.datetime(2023,8,3,14)
+        #fecha_str_h = self.fecha.strftime("%Y-%m-%d-%H:00")
+        fecha_str_h = fecha_provicional.strftime("%Y-%m-%d-%H:00")
         print("el día consultado de humedad es:", fecha_str_h)
         ind = fechas.index(fecha_str_h) +1
         print(len(fechas))
@@ -150,6 +152,46 @@ class msi_2(wmf.SimuBasin):
         return self.mapa_humedad
     
     
+    def generar_mapa_humedad_porcen(self, umbrales_humedad = [0,0.20,0.40,0.60,0.70,0.80,0.90,1], probabilidad_humedad = [0.9,0.8,0.7,0.5,0.15,0.05,0]):
+        """Esta función es una nueva alternativa para el mapa de humedad del suelo, considerando el porcentaje de llenado de los tanques"""
+        #Lectura de la cuenca
+        self.cu = wmf.SimuBasin(rute= self.ruta_nc)
+        #path = ruta_humedad
+        f=open(self.ruta_humedad+'.StOhdr', newline="\n")
+        filelines=f.readlines()
+        f.close()
+        IDs=np.array([int(i.split(',')[0]) for i in filelines[5:]])
+        fechas=np.array([(i.split(',')[-1]) for i in filelines[5:]])
+        fechas = [i.strip() for i in fechas]
+        fecha_str_h = self.fecha.strftime("%Y-%m-%d-%H:00")
+        print("el día consultado de humedad es:", fecha_str_h)
+        ind = fechas.index(fecha_str_h) +1
+        print(len(fechas))
+        print(ind)
+        self.mapa_humedad_porcen, self.R = wmf.models.read_float_basin_ncol(self.ruta_humedad + '.StObin',ind, self.cu.ncells, 5)
+        #if self.fecha < _datetime.datetime(2021,1,1):
+        #    ind = fechas.index(fecha_str_h) +1
+        #    print(ind)
+        #    self.mapa_humedad, self.R = wmf.models.read_float_basin_ncol(self.ruta_humedad + '.StObin',ind, self.cu.ncells, 5)
+        #else:
+        #    self.mapa_humedad, self.R = wmf.models.read_float_basin_ncol(self.ruta_humedad + '.StObin',len(IDs), self.cu.ncells, 5)
+        
+        
+        #self.mapa_humedad = self.mapa_humedad[0] + self.mapa_humedad[2]
+        hum_gravita = wmf.models.max_gravita
+        hum_gravita[hum_gravita==np.nan] = np.nanmax(hum_gravita)
+        hum_gravita[hum_gravita==0] = np.nanmax(hum_gravita)
+        hum_capi = wmf.models.max_capilar
+        hum_capi[hum_capi==np.nan] = np.nanmax(hum_capi)
+        hum_capi[hum_capi== 0] = np.nanmax(hum_capi)
+        
+        self.mapa_humedad_porcen[2][self.mapa_humedad_porcen[2] >hum_gravita[0]] = 74.6576
+        
+        self.mapa_humedad_porcen = ((self.mapa_humedad_porcen[2]/hum_gravita[0])+(self.mapa_humedad_porcen[0]/hum_capi[0]))/2
+        for i, probabilidad in enumerate(probabilidad_humedad):
+            self.mapa_humedad_porcen[(self.mapa_humedad_porcen >= umbrales_humedad[i])&(self.mapa_humedad_porcen <= umbrales_humedad[i + 1])] = probabilidad_humedad[i]
+        
+        return self.mapa_humedad_porcen
     #Funciones temperatura
     
     def generar_mapa_temperaturas(self, temperatura_wrf= None, reglas_temperatura = None, percentil_reglas = 'P75', prop = [135, 135, -76.77193450927734, 5.008949279785156, 0.0179290771484375, 0.01798248291015625, -9999]):
@@ -186,7 +228,15 @@ class msi_2(wmf.SimuBasin):
         
         #cargado de la temperatura
         if type(self.temperatura_wrf) == str:
-            self.mapa_temperatura_ambiente = pd.read_csv(self.temperatura_wrf, header=None, delim_whitespace=True).values[::-1].T
+            try:
+                self.mapa_temperatura_ambiente = pd.read_csv(self.temperatura_wrf, header=None, delim_whitespace=True).values[::-1].T
+            except:
+                print("No está disponible el archivo para hoy")
+                self.hoy = _datetime.datetime.strftime(self.fecha- _datetime.timedelta(hours=24), "%Y-%m-%d_%H") # Poner la fecha en el formato con que se guardan los archivos
+                self.hoy_utc = _datetime.datetime.strftime(self.fecha_utc - _datetime.timedelta(hours=24), "%Y-%m-%d_%H")
+                self.temperatura_wrf = self.ruta_temp + str(self.hoy_utc) +"_05"  if temperatura_wrf is None else temperatura_wrf
+                self.mapa_temperatura_ambiente = pd.read_csv(self.temperatura_wrf, header=None, delim_whitespace=True).values[::-1].T
+                
         elif type(self.temperatura_wrf) == np.ndarray:
             self.mapa_temperatura_ambiente = self.temperatura_wrf[::-1].T
         elif isinstance(self.temperatura_wrf, pd.DataFrame):
@@ -234,6 +284,23 @@ class msi_2(wmf.SimuBasin):
 
         return self.mapa_temperatura_superficial
     
+    
+    def generar_mapa_temperaturas_probabilidad(self, umbrales_temp = [15,20,25,30,35, 40],
+                                               probabilidad_temp = [0.05, 0.2, 0.35, 0.65, 0.8]):
+        """"
+        En esta función se crea el mapa de probabilidad de temperaturas partiendo del 
+        mapa de temperatura superficial
+        Estos umbrales y probabilidades están sujetas a revición y cambio
+        """
+        #generamos el mapa de temperatura superficial 
+        self.generar_mapa_temperaturas()
+        self.mapa_probabilidad_tem = np.zeros_like(self.mapa_temperatura_superficial)
+        for i, probabilidad in enumerate(probabilidad_temp):
+            self.mapa_probabilidad_tem[(self.mapa_temperatura_superficial >= umbrales_temp[i])&(self.mapa_temperatura_superficial <= umbrales_temp[i + 1])] = probabilidad_temp[i]
+            
+        return self.mapa_probabilidad_tem
+
+
     def generar_mapa_lluvia(self, lluvia_radar = None, fecha_inicio = None, fecha_fin = None, dias_acumulado = 10, umbral_sequia = 6, prop = [1728, 1728, -76.82, 4.9, 0.0015, 0.0015, 999999]):
         '''
         Genera un mapa de lluvia de radar para la cuenca y un mapa de sequia (ver definicion de mapa de sequia en la documentacion del modelo), a partir de indicar la fecha de inicio y de fin, para el caso en que se lea la lluvia de radar de una carpeta con archivos netcdf de lluvia de radar (para esto se requiere haber ingresado una ruta a self.ruta_lluvia). Ademas se pueden ingresar matrices con la lluvia siempre y cuando se agrege la lista de atributos de esta para reconstruir las longitudes y latitudes, en el argumento prop, como se muestra en la lista de parametros de la funcion desritos a continuacion:
@@ -386,6 +453,69 @@ class msi_2(wmf.SimuBasin):
         mask_temp[np.where(Temp >19)[0]] = 1
         ## Coeficientes:
         Wr=0.45 ; Wh=0.22 ; We=0.14 ; Whist=0.19
+        self.mapa_final = (Wr*Rain)+ (We*self.mapa_estatico) + (Whist*self.mapa_historico) + (Wh*Hum)
+        self.mapa_final = self.mapa_final*mask_temp
+        mascara=pd.read_csv(self.ruta_urbano,header=None, dtype=int).values
+        self.mapa_final_urban= self.mapa_final.copy()
+        mascara = mascara.reshape(mascara.shape[0])
+        self.mapa_final_urban[mascara]=None
+        return self.mapa_final, self.mapa_final_urban
+    
+    def generar_mapa_final_new_hum(self):
+        '''
+        Genera un mapa de de porbabilidad a la ocurrencia de incendios teniendo en cuenta la lluvia precedente, la humedad y temperatura del suelo y otros parámetros históricos
+        
+        Parametros 
+        ----------
+        temperatura_wrf    : Ruta para cargar el archivo que contiene la temperatura del aire generada por el model WRF
+        
+        Opcionales:
+        ----------
+        prop            : Propiedades del mapa de lluvia -> [ncolumnas, nfilas, xll, yll, dx, dy, no_data]
+        '''
+        
+        Hum = self.generar_mapa_humedad_porcen()
+        Temp = self.generar_mapa_temperaturas()
+        Rain = self.generar_mapa_lluvia_probabilidad(self.ruta_lluvia, self.fecha -
+                                                      _datetime.timedelta(days=7),self.fecha)
+        mask_temp = np.zeros_like(self.mapa_estatico)
+        mask_temp[np.where(Temp >19)[0]] = 1
+        ## Coeficientes:
+        Wr=0.45 ; Wh=0.22 ; We=0.14 ; Whist=0.19
+        self.mapa_final = (Wr*Rain)+ (We*self.mapa_estatico) + (Whist*self.mapa_historico) + (Wh*Hum)
+        self.mapa_final = self.mapa_final*mask_temp
+        mascara=pd.read_csv(self.ruta_urbano,header=None, dtype=int).values
+        self.mapa_final_urban= self.mapa_final.copy()
+        mascara = mascara.reshape(mascara.shape[0])
+        self.mapa_final_urban[mascara]=None
+        return self.mapa_final, self.mapa_final_urban
+    
+    
+    def generar_mapa_final_manual(self, Wh, Wr, We, Whist, Wt):
+        '''
+        Genera un mapa de de probabilidad a la ocurrencia de incendios teniendo
+        en cuenta la lluvia precedente, la humedad y temperatura del suelo y 
+        otros parámetros históricos
+        
+        Parametros 
+        ----------
+        temperatura_wrf    : Ruta para cargar el archivo que contiene la tempe-
+        ratura del aire generada por el model WRF
+        
+        Opcionales:
+        ----------
+        prop            : Propiedades del mapa de lluvia -> [ncolumnas, nfilas,
+        xll, yll, dx, dy, no_data]
+        '''
+        
+        Hum = self.generar_mapa_humedad()
+        Temp = self.generar_mapa_temperaturas()
+        Rain = self.generar_mapa_lluvia_probabilidad(self.ruta_lluvia, self.fecha -
+                                                      _datetime.timedelta(days=7),self.fecha)
+        mask_temp = np.zeros_like(self.mapa_estatico)
+        mask_temp[np.where(Temp >19)[0]] = 1
+        ## Coeficientes:
+        #Wr=0.45 ; Wh=0.22 ; We=0.14 ; Whist=0.19
         self.mapa_final = (Wr*Rain)+ (We*self.mapa_estatico) + (Whist*self.mapa_historico) + (Wh*Hum)
         self.mapa_final = self.mapa_final*mask_temp
         mascara=pd.read_csv(self.ruta_urbano,header=None, dtype=int).values
